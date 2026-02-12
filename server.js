@@ -14,6 +14,7 @@ const app = express();
    MIDDLEWARE
 ===================== */
 app.use(cors({ origin: "*" }));
+
 app.use(express.json());
 
 /* =====================
@@ -22,7 +23,7 @@ app.use(express.json());
 mongoose
   .connect(process.env.MONGO_URL)
   .then(() => console.log("✅ MongoDB Connected"))
-  .catch((err) => console.log("Mongo Error:", err));
+  .catch((err) => console.error("❌ Mongo Error:", err));
 
 /* =====================
    CLOUDINARY
@@ -34,18 +35,22 @@ cloudinary.config({
 });
 
 /* =====================
-   STORAGE (CLOUDINARY)
+   STORAGE
 ===================== */
 const storage = new CloudinaryStorage({
   cloudinary,
-  params: {
-    folder: "cupid",
-    allowed_formats: ["jpg", "jpeg", "png", "webp", "mp3"],
-    resource_type: "auto",
+  params: async (req, file) => {
+    return {
+      folder: "cupid",
+      resource_type: "auto",
+    };
   },
 });
 
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+});
 
 /* =====================
    CREATE LOVE PAGE
@@ -58,39 +63,36 @@ app.post(
   ]),
   async (req, res) => {
     try {
+      console.log("FILES:", req.files);
+      console.log("BODY:", req.body);
+
       const { name, message, password } = req.body;
 
       if (!name || !message || !req.files?.photo) {
         return res.status(400).json({
-          message: "Name, Message and Photo required",
+          message: "Name, Message, Photo required",
         });
       }
-
-      // ✅ IMPORTANT FIX: use secure_url
-      const photoUrl = req.files.photo[0].secure_url;
-
-      const songUrls = req.files.songs
-        ? req.files.songs.map((f) => f.secure_url)
-        : [];
 
       const love = await Love.create({
         name,
         message,
         password: password || "",
-        photo: photoUrl,      // ✅ Cloudinary URL
-        songs: songUrls,      // ✅ Cloudinary URLs
+
+        photo: req.files.photo[0].path,
+
+        songs: req.files.songs ? req.files.songs.map((f) => f.path) : [],
       });
 
-      res.json({ id: love._id });
-
+      res.status(201).json({ id: love._id });
     } catch (err) {
-      console.error("UPLOAD ERROR ❌", err);
+      console.error("CREATE ERROR ❌", err.stack || err);
 
-      res.status(500).json({
-        message: "Upload failed",
+      return res.status(500).json({
+        message: err.message || "Internal Server Error",
       });
     }
-  }
+  },
 );
 
 /* =====================
@@ -107,9 +109,8 @@ app.get("/api/love/:id", async (req, res) => {
     }
 
     res.json(love);
-
   } catch (err) {
-    console.error("FETCH ERROR ❌", err);
+    console.error("FETCH ERROR:", err);
 
     res.status(500).json({
       message: "Server error",
@@ -118,7 +119,7 @@ app.get("/api/love/:id", async (req, res) => {
 });
 
 /* =====================
-   START SERVER
+   START
 ===================== */
 const PORT = process.env.PORT || 4000;
 
