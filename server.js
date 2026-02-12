@@ -2,34 +2,19 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
-const { v4: uuidv4 } = require("uuid");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const cloudinary = require("cloudinary").v2;
 require("dotenv").config();
-
-/* =====================
-   CRASH PROTECTION
-===================== */
-process.on("uncaughtException", console.error);
-process.on("unhandledRejection", console.error);
 
 const Love = require("./models/Love");
 
 const app = express();
 
 /* =====================
-   CREATE UPLOAD FOLDER
-===================== */
-if (!fs.existsSync("uploads")) {
-  fs.mkdirSync("uploads");
-}
-
-/* =====================
    MIDDLEWARE
 ===================== */
-app.use(cors());
+app.use(cors({ origin: "*" }));
 app.use(express.json());
-app.use("/uploads", express.static("uploads"));
 
 /* =====================
    MONGODB
@@ -37,46 +22,30 @@ app.use("/uploads", express.static("uploads"));
 mongoose
   .connect(process.env.MONGO_URL)
   .then(() => console.log("✅ MongoDB Connected"))
-  .catch((err) => {
-    console.error("❌ Mongo Error:", err);
-    process.exit(1);
-  });
+  .catch((err) => console.log("Mongo Error:", err));
 
 /* =====================
-   MULTER CONFIG
+   CLOUDINARY
 ===================== */
-const storage = multer.diskStorage({
-  destination: "uploads/",
-  filename: (req, file, cb) => {
-    cb(null, uuidv4() + path.extname(file.originalname));
+cloudinary.config({
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_API_KEY,
+  api_secret: process.env.CLOUD_API_SECRET,
+});
+
+/* =====================
+   STORAGE (CLOUDINARY)
+===================== */
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "cupid",
+    allowed_formats: ["jpg", "jpeg", "png", "webp", "mp3"],
+    resource_type: "auto",
   },
 });
 
-/* FILE FILTER */
-const fileFilter = (req, file, cb) => {
-
-  if (file.fieldname === "photo") {
-    if (!file.mimetype.startsWith("image/")) {
-      return cb(new Error("Only images allowed"));
-    }
-  }
-
-  if (file.fieldname === "songs") {
-    if (!file.mimetype.startsWith("audio/")) {
-      return cb(new Error("Only audio allowed"));
-    }
-  }
-
-  cb(null, true);
-};
-
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: {
-    fileSize: 15 * 1024 * 1024, // 15MB
-  },
-});
+const upload = multer({ storage });
 
 /* =====================
    CREATE LOVE PAGE
@@ -89,100 +58,63 @@ app.post(
   ]),
   async (req, res) => {
     try {
-
-      console.log("📂 Files:", req.files);
-      console.log("📝 Body:", req.body);
-
       const { name, message, password } = req.body;
 
-      /* VALIDATION */
-      if (!name || !message) {
+      if (!name || !message || !req.files?.photo) {
         return res.status(400).json({
-          message: "Name and Message required",
+          message: "Name, Message and Photo required",
         });
       }
 
-      if (!req.files?.photo) {
-        return res.status(400).json({
-          message: "Photo is required",
-        });
-      }
+      // ✅ IMPORTANT FIX: use secure_url
+      const photoUrl = req.files.photo[0].secure_url;
 
-      /* FILES */
-      const photoFile = req.files.photo[0].filename;
-
-      const songFiles = req.files.songs
-        ? req.files.songs.map((f) => f.filename)
+      const songUrls = req.files.songs
+        ? req.files.songs.map((f) => f.secure_url)
         : [];
 
-      /* SAVE DB */
       const love = await Love.create({
         name,
         message,
         password: password || "",
-
-        photo: photoFile,
-        songs: songFiles,
+        photo: photoUrl,      // ✅ Cloudinary URL
+        songs: songUrls,      // ✅ Cloudinary URLs
       });
 
-      console.log("❤️ Created:", love._id);
-
-      res.status(201).json({
-        id: love._id,
-        message: "Love page created 💖",
-      });
+      res.json({ id: love._id });
 
     } catch (err) {
-
       console.error("UPLOAD ERROR ❌", err);
 
       res.status(500).json({
-        message: err.message || "Upload Failed",
+        message: "Upload failed",
       });
     }
   }
 );
 
 /* =====================
-   GET LOVE PAGE (SAFE)
+   GET LOVE PAGE
 ===================== */
 app.get("/api/love/:id", async (req, res) => {
   try {
-
-    const { id } = req.params;
-
-    /* VALIDATE ID */
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        message: "Invalid ID",
-      });
-    }
-
-    const love = await Love.findById(id);
+    const love = await Love.findById(req.params.id);
 
     if (!love) {
       return res.status(404).json({
-        message: "Page Not Found",
+        message: "Not found",
       });
     }
 
     res.json(love);
 
   } catch (err) {
-
     console.error("FETCH ERROR ❌", err);
 
     res.status(500).json({
-      message: "Server Error",
+      message: "Server error",
     });
   }
-});
-
-/* =====================
-   HEALTH CHECK
-===================== */
-app.get("/", (req, res) => {
-  res.send("💘 CUPID API Running");
 });
 
 /* =====================
@@ -191,5 +123,5 @@ app.get("/", (req, res) => {
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
-  console.log(`🚀 Backend running on port ${PORT}`);
+  console.log(`🚀 Server running on ${PORT}`);
 });
