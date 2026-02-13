@@ -25,7 +25,7 @@ mongoose
   .catch((err) => console.error("❌ Mongo Error:", err));
 
 /* =====================
-   CLOUDINARY CONFIG
+   CLOUDINARY
 ===================== */
 cloudinary.config({
   cloud_name: process.env.CLOUD_NAME,
@@ -37,7 +37,7 @@ cloudinary.config({
    MULTER STORAGE
 ===================== */
 const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
+  cloudinary,
   params: {
     folder: "cupid",
     resource_type: "auto",
@@ -45,35 +45,31 @@ const storage = new CloudinaryStorage({
 });
 
 const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 20 * 1024 * 1024, // 20MB
-  },
+  storage,
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
 });
 
 /* =====================
-   CREATE LOVE PAGE
+   CREATE LOVE
 ===================== */
 app.post(
   "/api/create",
-
   upload.fields([
     { name: "photo", maxCount: 1 },
     { name: "songs", maxCount: 5 },
   ]),
-
   async (req, res) => {
     try {
       console.log("FILES:", req.files);
       console.log("BODY:", req.body);
 
-      const name = req.body?.name;
-      const message = req.body?.message;
-      const password = req.body?.password || "";
+      const name = req.body.name;
+      const message = req.body.message;
+      const password = req.body.password || "";
 
       if (!name || !message || !req.files?.photo) {
         return res.status(400).json({
-          message: "Name, Message, Photo required",
+          message: "Missing required fields",
         });
       }
 
@@ -81,10 +77,7 @@ app.post(
         name,
         message,
         password,
-
-        // Cloudinary URLs
         photo: req.files.photo[0].path,
-
         songs: req.files.songs
           ? req.files.songs.map((f) => f.path)
           : [],
@@ -94,31 +87,30 @@ app.post(
         id: love._id,
       });
     } catch (err) {
-      console.error("CREATE ERROR ❌", err);
+      console.error("UPLOAD ERROR ❌", err);
 
       res.status(500).json({
-        message: err.message || "Upload Failed",
+        message: "Upload failed",
+        error: err.message,
       });
     }
   }
 );
 
 /* =====================
-   GET LOVE PAGE
+   GET LOVE
 ===================== */
 app.get("/api/love/:id", async (req, res) => {
   try {
     const love = await Love.findById(req.params.id);
 
     if (!love) {
-      return res.status(404).json({
-        message: "Not found",
-      });
+      return res.status(404).json({ message: "Not found" });
     }
 
     res.json(love);
   } catch (err) {
-    console.error("FETCH ERROR ❌", err);
+    console.error(err);
 
     res.status(500).json({
       message: "Server error",
@@ -127,14 +119,14 @@ app.get("/api/love/:id", async (req, res) => {
 });
 
 /* =====================
-   ROOT TEST
+   ROOT
 ===================== */
 app.get("/", (req, res) => {
   res.send("Cupid Backend Running ❤️");
 });
 
 /* =====================
-   START SERVER
+   START
 ===================== */
 const PORT = process.env.PORT || 4000;
 
