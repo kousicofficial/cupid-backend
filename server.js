@@ -38,14 +38,13 @@ cloudinary.config({
    STORAGE
 ===================== */
 const storage = new CloudinaryStorage({
-  cloudinary,
-  params: async (req, file) => {
-    return {
-      folder: "cupid",
-      resource_type: "auto",
-    };
+  cloudinary: cloudinary,
+  params: {
+    folder: "cupid",
+    resource_type: "auto",
   },
 });
+
 
 const upload = multer({
   storage,
@@ -123,6 +122,11 @@ app.get("/api/love/:id", async (req, res) => {
 ===================== */
 const PORT = process.env.PORT || 4000;
 
-app.listen(PORT, () => {
+const http = require("http");
+
+const server = http.createServer(app);
+
+server.listen(PORT, () => {
   console.log(`🚀 Server running on ${PORT}`);
 });
+
