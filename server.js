@@ -13,6 +13,11 @@ const app = express();
 /* =====================
    MIDDLEWARE
 ===================== */
+app.use((req, res, next) => {
+  res.setTimeout(120000); // 2 minutes
+  next();
+});
+
 app.use(cors({ origin: "*" }));
 
 app.use(express.json());
