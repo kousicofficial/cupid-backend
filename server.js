@@ -11,7 +11,7 @@ const app = express();
    MIDDLEWARE
 ===================== */
 app.use(cors({ origin: "*" }));
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /* =====================
@@ -26,38 +26,59 @@ mongoose
    CREATE LOVE PAGE
    (NO FILE UPLOAD HERE)
 ===================== */
-app.post("/api/create", async (req, res) => {
-  try {
-    console.log("BODY:", req.body);
+/* =====================
+   CREATE LOVE PAGE (FIXED)
+===================== */
+app.post(
+  "/api/create",
 
-    const { name, message, password, photo, songs } = req.body;
+  // This parses multipart form fields
+  upload.fields([
+    { name: "photo", maxCount: 1 },
+    { name: "songs", maxCount: 5 },
+  ]),
 
-    // Validation
-    if (!name || !message || !photo) {
-      return res.status(400).json({
-        message: "Name, Message, Photo required",
+  async (req, res) => {
+    try {
+      // DEBUG (keep for now)
+      console.log("FILES:", req.files);
+      console.log("BODY:", req.body);
+
+      // SAFE way to read body
+      const name = req.body?.name;
+      const message = req.body?.message;
+      const password = req.body?.password || "";
+
+      if (!name || !message || !req.files?.photo) {
+        return res.status(400).json({
+          message: "Name, Message, Photo required",
+        });
+      }
+
+      const love = await Love.create({
+        name,
+        message,
+        password,
+
+        // Cloudinary URL
+        photo: req.files.photo[0].path,
+
+        // Song URLs
+        songs: req.files.songs ? req.files.songs.map((f) => f.path) : [],
+      });
+
+      res.status(201).json({
+        id: love._id,
+      });
+    } catch (err) {
+      console.error("CREATE ERROR ❌", err);
+
+      res.status(500).json({
+        message: err.message || "Upload Failed",
       });
     }
-
-    const love = await Love.create({
-      name,
-      message,
-      password: password || "",
-      photo,              // Cloudinary URL
-      songs: songs || [], // Array of URLs
-    });
-
-    res.status(201).json({
-      id: love._id,
-    });
-  } catch (err) {
-    console.error("CREATE ERROR ❌", err);
-
-    res.status(500).json({
-      message: "Server error",
-    });
-  }
-});
+  },
+);
 
 /* =====================
    GET LOVE PAGE
