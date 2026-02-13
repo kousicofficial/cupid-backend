@@ -1,6 +1,9 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const multer = require("multer");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const cloudinary = require("cloudinary").v2;
 require("dotenv").config();
 
 const Love = require("./models/Love");
@@ -12,7 +15,6 @@ const app = express();
 ===================== */
 app.use(cors({ origin: "*" }));
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 /* =====================
    MONGODB
@@ -23,16 +25,38 @@ mongoose
   .catch((err) => console.error("❌ Mongo Error:", err));
 
 /* =====================
-   CREATE LOVE PAGE
-   (NO FILE UPLOAD HERE)
+   CLOUDINARY CONFIG
 ===================== */
+cloudinary.config({
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_API_KEY,
+  api_secret: process.env.CLOUD_API_SECRET,
+});
+
 /* =====================
-   CREATE LOVE PAGE (FIXED)
+   MULTER STORAGE
+===================== */
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "cupid",
+    resource_type: "auto",
+  },
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 20 * 1024 * 1024, // 20MB
+  },
+});
+
+/* =====================
+   CREATE LOVE PAGE
 ===================== */
 app.post(
   "/api/create",
 
-  // This parses multipart form fields
   upload.fields([
     { name: "photo", maxCount: 1 },
     { name: "songs", maxCount: 5 },
@@ -40,11 +64,9 @@ app.post(
 
   async (req, res) => {
     try {
-      // DEBUG (keep for now)
       console.log("FILES:", req.files);
       console.log("BODY:", req.body);
 
-      // SAFE way to read body
       const name = req.body?.name;
       const message = req.body?.message;
       const password = req.body?.password || "";
@@ -60,11 +82,12 @@ app.post(
         message,
         password,
 
-        // Cloudinary URL
+        // Cloudinary URLs
         photo: req.files.photo[0].path,
 
-        // Song URLs
-        songs: req.files.songs ? req.files.songs.map((f) => f.path) : [],
+        songs: req.files.songs
+          ? req.files.songs.map((f) => f.path)
+          : [],
       });
 
       res.status(201).json({
@@ -77,7 +100,7 @@ app.post(
         message: err.message || "Upload Failed",
       });
     }
-  },
+  }
 );
 
 /* =====================
